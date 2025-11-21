@@ -10,6 +10,20 @@ import (
 // be terminated.
 type WalkFn func(s string, v any) bool
 
+// WalkInsertFn is used when walking the tree for
+// insertion. It takes a key and value, and returns
+// three values: whether to stop walking, whether
+// to insert a new value at this location, and
+// the value to insert if so.
+type WalkInsertFn func(s string, v any) (bool, bool, any)
+
+func (fn WalkFn) toWalkInsertFn() WalkInsertFn {
+	return func(s string, v any) (bool, bool, any) {
+		stop := fn(s, v)
+		return stop, false, nil
+	}
+}
+
 // leafNode is used to represent a value
 type leafNode struct {
 	key string
@@ -308,7 +322,7 @@ func (t *Tree) deletePrefix(parent, n *node, prefix string) int {
 	if len(prefix) == 0 {
 		// Remove the leaf node
 		subTreeSize := 0
-		//recursively walk from all edges of the node to be deleted
+		// recursively walk from all edges of the node to be deleted
 		recursiveWalk(n, func(s string, v any) bool {
 			subTreeSize++
 			return false
@@ -454,13 +468,22 @@ func (t *Tree) Walk(fn WalkFn) {
 }
 
 // WalkPrefix is used to walk the tree under a prefix
+func (t *Tree) WalkInsertPrefix(prefix string, fn WalkInsertFn) {
+	t.walkPrefix(prefix, fn)
+}
+
+// WalkPrefix is used to walk the tree under a prefix
 func (t *Tree) WalkPrefix(prefix string, fn WalkFn) {
+	t.walkPrefix(prefix, fn.toWalkInsertFn())
+}
+
+func (t *Tree) walkPrefix(prefix string, fn WalkInsertFn) {
 	n := t.root
 	search := prefix
 	for {
 		// Check for key exhaustion
 		if len(search) == 0 {
-			recursiveWalk(n, fn)
+			recursiveWalkInsert(n, fn)
 			return
 		}
 
@@ -477,7 +500,7 @@ func (t *Tree) WalkPrefix(prefix string, fn WalkFn) {
 		}
 		if strings.HasPrefix(n.prefix, search) {
 			// Child may be under our search prefix
-			recursiveWalk(n, fn)
+			recursiveWalkInsert(n, fn)
 		}
 		return
 	}
@@ -516,12 +539,22 @@ func (t *Tree) WalkPath(path string, fn WalkFn) {
 	}
 }
 
+func recursiveWalk(n *node, fn WalkFn) bool {
+	return recursiveWalkInsert(n, fn.toWalkInsertFn())
+}
+
 // recursiveWalk is used to do a pre-order walk of a node
 // recursively. Returns true if the walk should be aborted
-func recursiveWalk(n *node, fn WalkFn) bool {
+func recursiveWalkInsert(n *node, fn WalkInsertFn) bool {
 	// Visit the leaf values if any
-	if n.leaf != nil && fn(n.leaf.key, n.leaf.val) {
-		return true
+	if n.leaf != nil {
+		stop, insert, newVal := fn(n.leaf.key, n.leaf.val)
+		if insert {
+			n.leaf.val = newVal
+		}
+		if stop {
+			return true
+		}
 	}
 
 	// Recurse on the children
@@ -529,7 +562,7 @@ func recursiveWalk(n *node, fn WalkFn) bool {
 	k := len(n.edges) // keeps track of number of edges in previous iteration
 	for i < k {
 		e := n.edges[i]
-		if recursiveWalk(e.node, fn) {
+		if recursiveWalkInsert(e.node, fn) {
 			return true
 		}
 		// It is a possibility that the WalkFn modified the node we are
@@ -537,7 +570,7 @@ func recursiveWalk(n *node, fn WalkFn) bool {
 		// so the last edge became the current node n, on which we'll
 		// iterate one last time.
 		if len(n.edges) == 0 {
-			return recursiveWalk(n, fn)
+			return recursiveWalkInsert(n, fn)
 		}
 		// If there are now less edges than in the previous iteration,
 		// then do not increment the loop index, since the current index

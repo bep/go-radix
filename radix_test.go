@@ -408,9 +408,14 @@ func BenchmarkInsert(b *testing.B) {
 
 func BenchmarkMisc(b *testing.B) {
 	r := New()
+
+	type n struct {
+		s string
+	}
+
 	for i := range 100 {
 		for j := range 100 {
-			r.Insert(fmt.Sprintf("init%d/%d", i, j), true)
+			r.Insert(fmt.Sprintf("init%d/%d", i, j), n{s: "value"})
 		}
 	}
 
