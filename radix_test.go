@@ -88,7 +88,6 @@ func TestRoot(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-
 	r := New()
 
 	s := []string{"", "A", "AB"}
@@ -405,4 +404,45 @@ func BenchmarkInsert(b *testing.B) {
 			b.Fatal("bad")
 		}
 	}
+}
+
+func BenchmarkMisc(b *testing.B) {
+	r := New()
+	for i := range 100 {
+		for j := range 100 {
+			r.Insert(fmt.Sprintf("init%d/%d", i, j), true)
+		}
+	}
+
+	b.ResetTimer()
+
+	b.Run("Walk", func(b *testing.B) {
+		for n := 0; b.Loop(); n++ {
+			r.Walk(func(s string, v any) bool {
+				return false
+			})
+		}
+	})
+
+	b.Run("WalkPrefix", func(b *testing.B) {
+		for n := 0; b.Loop(); n++ {
+			r.WalkPrefix("init50", func(s string, v any) bool {
+				return false
+			})
+		}
+	})
+
+	b.Run("WalkPath", func(b *testing.B) {
+		for n := 0; b.Loop(); n++ {
+			r.WalkPath("init50/50", func(s string, v any) bool {
+				return false
+			})
+		}
+	})
+
+	b.Run("LongestPrefix", func(b *testing.B) {
+		for n := 0; b.Loop(); n++ {
+			r.LongestPrefix("init50/50")
+		}
+	})
 }
